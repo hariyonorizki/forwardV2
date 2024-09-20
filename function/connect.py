@@ -1,12 +1,26 @@
 import os
+import mysql.connector
 from telethon import TelegramClient
 from cryptography.fernet import Fernet
+from dotenv import load_dotenv
 
-# Generate kunci enkripsi
+# Load environment variables
+load_dotenv()
+
+# Database connection
+db = mysql.connector.connect(
+    host=os.getenv('MYSQL_HOST'),
+    user=os.getenv('MYSQL_USER'),
+    password=os.getenv('MYSQL_PASSWORD'),
+    database=os.getenv('MYSQL_DATABASE')
+)
+cursor = db.cursor()
+
+# Generate encryption key
 key = Fernet.generate_key()
 cipher_suite = Fernet(key)
 
-# Pastikan direktori 'sessions/' ada
+# Ensure the 'sessions' directory exists
 if not os.path.exists('sessions'):
     os.makedirs('sessions')
 
@@ -23,7 +37,7 @@ async def connect_user(bot, event):
         phone_event = await bot.wait_for(events.NewMessage(from_user=user_id))
         phone = phone_event.text
 
-        # Simpan dan enkripsi nomor telepon
+        # Save and encrypt phone number
         encrypted_phone = cipher_suite.encrypt(phone.encode())
         with open(f'{session_file}_phone', 'wb') as f:
             f.write(encrypted_phone)
@@ -36,6 +50,10 @@ async def connect_user(bot, event):
         try:
             await client.sign_in(phone, code)
             await event.respond("Berhasil login!")
+            
+            # Save session in database
+            cursor.execute("INSERT INTO sessions (user_id, session_data) VALUES (%s, %s)", (user_id, session_name))
+            db.commit()
         except Exception as e:
             await event.respond(f"Login gagal: {str(e)}")
     else:

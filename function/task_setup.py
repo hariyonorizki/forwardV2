@@ -1,6 +1,21 @@
 import re
+import os
+import mysql.connector
+from dotenv import load_dotenv
 
-# Dictionary untuk menyimpan task dan aturan filter, blacklist, serta replace
+# Load environment variables
+load_dotenv()
+
+# Database connection
+db = mysql.connector.connect(
+    host=os.getenv('MYSQL_HOST'),
+    user=os.getenv('MYSQL_USER'),
+    password=os.getenv('MYSQL_PASSWORD'),
+    database=os.getenv('MYSQL_DATABASE')
+)
+cursor = db.cursor()
+
+# Dictionary untuk menyimpan task
 tasks = {}
 
 # Fungsi untuk membuat atau mengatur task
@@ -17,6 +32,11 @@ async def setup_task(bot, event):
             'replace': None      # Default: tidak ada replace
         }
         await event.respond(f"✅ Task '{label}' berhasil dibuat.")
+
+        # Simpan task ke database
+        cursor.execute("INSERT INTO tasks (label, filter, blacklist, replace) VALUES (%s, %s, %s, %s)", 
+                       (label, 'all', None, None))
+        db.commit()
     else:
         await event.respond("❌ Format salah! Gunakan: /setup_task <label>")
 
@@ -33,6 +53,10 @@ async def set_filter(bot, event):
         if label in tasks:
             tasks[label]['filter'] = filter_types
             await event.respond(f"✅ Filter untuk '{label}' berhasil diatur: {', '.join(filter_types)}")
+
+            # Update filter di database
+            cursor.execute("UPDATE tasks SET filter = %s WHERE label = %s", (','.join(filter_types), label))
+            db.commit()
         else:
             await event.respond("❌ Label tidak ditemukan! Gunakan /setup_task terlebih dahulu.")
     else:
@@ -51,6 +75,10 @@ async def set_blacklist(bot, event):
         if label in tasks:
             tasks[label]['blacklist'] = blacklist_items
             await event.respond(f"✅ Blacklist untuk '{label}' berhasil diatur: {', '.join(blacklist_items)}")
+
+            # Update blacklist di database
+            cursor.execute("UPDATE tasks SET blacklist = %s WHERE label = %s", (','.join(blacklist_items), label))
+            db.commit()
         else:
             await event.respond("❌ Label tidak ditemukan! Gunakan /setup_task terlebih dahulu.")
     else:
@@ -71,11 +99,19 @@ async def set_replace(bot, event):
             if replace_type == 'caption':
                 tasks[label]['replace'] = {'caption': replace_value}
                 await event.respond(f"✅ Caption replace untuk '{label}' berhasil diatur.")
+
+                # Update replace di database
+                cursor.execute("UPDATE tasks SET replace = %s WHERE label = %s", (replace_value, label))
+                db.commit()
             elif replace_type == 'button':
                 buttons = replace_value.split(' ')
                 if len(buttons) == 2 or len(buttons) == 4:
                     tasks[label]['replace'] = {'button': buttons}
                     await event.respond(f"✅ Button replace untuk '{label}' berhasil diatur.")
+                    
+                    # Update replace di database
+                    cursor.execute("UPDATE tasks SET replace = %s WHERE label = %s", (','.join(buttons), label))
+                    db.commit()
                 else:
                     await event.respond("❌ Format salah! Gunakan: /replace <label> button <ButtonLabel> <ButtonLink> [optional: <ButtonLabel> <ButtonLink>]")
         else:
